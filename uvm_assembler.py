@@ -47,22 +47,28 @@ class UVMAssembler:
         self.instructions: List[Instruction] = []
 
     def assemble(self, input_file: str, output_file: str) -> None:
-        # Этап 1: Чтение исходного файла
+        # Этап 1 Чтение исходного файла
         try:
             with open(input_file, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
         except FileNotFoundError:
             raise FileNotFoundError(f"Файл не найден: {input_file}")
 
-        # Этап 2: Парсинг и трансляция
+        # Этап 2 Трансляция в промежуточный код
         self._parse_assembly(lines)
 
-        # Этап 3: Вывод внутреннего представления (если режим тестирования)
+        # Этап 3 Трансляция в машиннный код
+        self._generate_machine_code()
+
+        # Этап 4 Вывод внутреннего представления (если режим тестирования)
         if self.test_mode:
             self._print_internal_representation()
 
-        # Этап 4: Генерация бинарного файла
+        # Этап 5 Генерация бинарного файла
         self._write_binary_file(output_file)
+
+        # Этап 6 Вывод о данных файла
+        self._print_summary(output_file)
 
     def _parse_assembly(self, lines: List[str]) -> None:
         for line_num, line in enumerate(lines, start=1):
@@ -83,23 +89,28 @@ class UVMAssembler:
             except AssemblyException as e:
                 raise AssemblyException(f"Line {line_num}: {str(e)}")
 
+    def _generate_machine_code(self) -> None:
+        binary_parts: List[bytes] = []
+
+        for instr in self.instructions:
+            encoded = instr.encode()
+            binary_parts.append(encoded)
+
+        self.binary_data = b''.join(binary_parts)
+
     def _parse_instruction(self, mnemonic: str, tokens: List[str],
                            line_num: int) -> Instruction:
-        # Проверка количества аргументов
         if len(tokens) < 2:
             raise AssemblyException(f"Команда '{mnemonic}' требует операнда")
 
-        # Парсим операнд
         try:
             operand = self._parse_operand(tokens[1])
         except ValueError as e:
             raise AssemblyException(f"Неверный формат операнда: {tokens[1]}")
 
-        # Валидируем диапазон (биты 8-30, т.е. макс. 2^23 - 1 = 8388607)
         if not (0 <= operand <= 0x7FFFFF):
             raise AssemblyException(f"Операнд вне диапазона: {operand}")
 
-        # Получаем опкод
         if mnemonic not in self.MNEMONICS:
             raise AssemblyException(f"Неизвестная команда: {mnemonic}")
 
@@ -137,19 +148,26 @@ class UVMAssembler:
             for instr in self.instructions:
                 f.write(instr.encode())
 
+    def _print_summary(self, output_file: str) -> None:
+        file_size = len(self.binary_data)
+        instruction_count = len(self.instructions)
 
-def print_usage():
-    """Выводит справку по использованию."""
-    print("Использование: python3 uvm_assembler.py <input.asm> <output.bin> [--test]")
-    print()
-    print("Примеры:")
-    print("  python uvm_assembler.py program.asm program.bin")
-    print("  python uvm_assembler.py program.asm program.bin --test")
+        print("\n" + "=" * 60)
+        print("  СВОДКА ПО АССЕМБЛИРОВАНИЮ")
+        print("=" * 60)
+        print(f"\n✓ Успешно скомпилировано")
+        print(f"  Выходной файл: {output_file}")
+        print(f"  Инструкций: {instruction_count}")
+        print(f"  Размер: {file_size} байт ({instruction_count * 4} ожидается)")
+
+        if file_size != instruction_count * 4:
+            print(f"  ВНИМАНИЕ: размер не соответствует ожидаемому!")
+
+        print()
 
 
 def main():
     if len(sys.argv) < 3:
-        print_usage()
         sys.exit(1)
 
     input_file = sys.argv[1]
@@ -159,6 +177,7 @@ def main():
     try:
         assembler = UVMAssembler(test_mode)
         assembler.assemble(input_file, output_file)
+        print(assembler.binary_data)
         print(f"✓ Успешно скомпилировано в {output_file}")
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)
